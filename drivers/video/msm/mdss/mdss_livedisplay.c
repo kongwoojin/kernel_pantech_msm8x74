@@ -296,6 +296,9 @@ int mdss_livedisplay_update(struct mdss_dsi_ctrl_pdata *ctrl_pdata,
 
 	mlc = pinfo->livedisplay;
 
+	if (mlc->mfd == NULL)
+		return -ENODEV;
+
 	mutex_lock(&mlc->lock);
 	ret = mdss_livedisplay_update_locked(ctrl_pdata, types);
 	mutex_unlock(&mlc->lock);
@@ -671,4 +674,3 @@ sysfs_err:
 	pr_err("%s: sysfs creation failed, rc=%d", __func__, rc);
 	return rc;
 }
-

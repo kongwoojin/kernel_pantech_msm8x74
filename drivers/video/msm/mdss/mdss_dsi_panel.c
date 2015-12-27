@@ -2379,8 +2379,6 @@ static int mdss_dsi_panel_on(struct mdss_panel_data *pdata)
 		}
 #endif
 
-	mdss_livedisplay_update(ctrl, MODE_UPDATE_ALL);
-
 	pr_err("%s:-\n", __func__);
 
 #ifdef CONFIG_POWERSUSPEND

@@ -26,6 +26,7 @@
 #include "mdss_panel.h"
 #include "mdss_dsi.h"
 #include "mdss_debug.h"
+#include "mdss_livedisplay.h"
 #ifdef CONFIG_F_SKYDISP_SILENT_BOOT	 //seunghwa_Ji p13832 	
 #include <mach/pantech_sys.h>
 #endif
@@ -920,6 +921,9 @@ static int mdss_dsi_unblank(struct mdss_panel_data *pdata)
 #ifdef CONFIG_F_SKYDISP_SILENT_BOOT	//seunghwa_Ji p13832
 	pantech_sys_reset_backlight_flag_set(true);	
 #endif
+
+	mdss_livedisplay_update(pdata->panel_info.livedisplay,
+			MODE_UPDATE_ALL);
 
 	pr_debug("%s-:\n", __func__);
 

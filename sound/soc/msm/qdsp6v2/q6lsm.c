@@ -29,8 +29,8 @@
 #include <sound/q6core.h>
 #include <sound/q6lsm.h>
 #include <asm/ioctls.h>
-#include <mach/memory.h>
-#include <mach/debug_mm.h>
+#include <linux/memory.h>
+#include <linux/msm_audio_ion.h>
 #include "audio_acdb.h"
 
 #define APR_TIMEOUT	(5 * HZ)
@@ -618,11 +618,8 @@ int q6lsm_snd_model_buf_free(struct lsm_client *client)
 		pr_err("%s CMD Memory_unmap_regions failed\n", __func__);
 
 	if (client->sound_model.data) {
-		ion_unmap_kernel(client->sound_model.client,
-						 client->sound_model.handle);
-		ion_free(client->sound_model.client,
+		msm_audio_ion_free(client->sound_model.client,
 				 client->sound_model.handle);
-		ion_client_destroy(client->sound_model.client);
 		client->sound_model.client = NULL;
 		client->sound_model.handle = NULL;
 		client->sound_model.data = NULL;
@@ -639,11 +636,6 @@ static struct lsm_client *q6lsm_get_lsm_client(int session_id)
 	unsigned long flags;
 	struct lsm_client *client = NULL;
 
-	if (session_id == LSM_CONTROL_SESSION) {
-		client = &lsm_common.common_client[session_id];
-		goto done;
-	}
-
 	spin_lock_irqsave(&lsm_session_lock, flags);
 	if (session_id < LSM_MIN_SESSION_ID || session_id > LSM_MAX_SESSION_ID)
 		pr_err("%s: Invalid session %d\n", __func__, session_id);
@@ -652,7 +644,6 @@ static struct lsm_client *q6lsm_get_lsm_client(int session_id)
 	else
 		client = lsm_session[session_id];
 	spin_unlock_irqrestore(&lsm_session_lock, flags);
-done:
 	return client;
 }
 
@@ -730,7 +721,7 @@ int q6lsm_snd_model_buf_alloc(struct lsm_client *client, size_t len)
 	memset(&lsm_cal, 0, sizeof(lsm_cal));
 	mutex_lock(&client->cmd_lock);
 	get_lsm_cal(&lsm_cal);
-	pr_debug("%s:Snd Model len = %d cal size %d", __func__,
+	pr_debug("%s:Snd Model len = %zd cal size %zd", __func__,
 			 len, lsm_cal.cal_size);
 	if (!lsm_cal.cal_paddr) {
 		pr_err("%s: No LSM calibration set for session", __func__);
@@ -741,50 +732,36 @@ int q6lsm_snd_model_buf_alloc(struct lsm_client *client, size_t len)
 		client->sound_model.size = len;
 		pad_zero = (LSM_ALIGN_BOUNDARY -
 			   (len % LSM_ALIGN_BOUNDARY));
-		total_mem = pad_zero + len + lsm_cal.cal_size;
-		pr_debug("%s: Pad zeros sound model %d Total mem %d\n",
+		total_mem = PAGE_ALIGN(pad_zero + len + lsm_cal.cal_size);
+		pr_debug("%s: Pad zeros sound model %zd Total mem %zd\n",
 				 __func__, pad_zero, total_mem);
-		client->sound_model.client =
-		    msm_ion_client_create(UINT_MAX, "lsm_client");
-		if (IS_ERR_OR_NULL(client->sound_model.client)) {
-			pr_err("%s: ION create client for AUDIO failed\n",
-			       __func__);
-			goto fail;
-		}
-		client->sound_model.handle =
-		ion_alloc(client->sound_model.client,
-			  total_mem, SZ_4K, (0x1 << ION_AUDIO_HEAP_ID), 0);
-		if (IS_ERR_OR_NULL(client->sound_model.handle)) {
-			pr_err("%s: ION memory allocation for AUDIO failed\n",
-			       __func__);
-			goto fail;
-		}
-
-		rc = ion_phys(client->sound_model.client,
-			      client->sound_model.handle,
-			      (ion_phys_addr_t *)&client->sound_model.phys,
-			      (size_t *)&len);
+		rc = msm_audio_ion_alloc("lsm_client",
+				&client->sound_model.client,
+				&client->sound_model.handle,
+				total_mem,
+				(ion_phys_addr_t *)&client->sound_model.phys,
+				(size_t *)&len,
+				&client->sound_model.data);
 		if (rc) {
-			pr_err("%s: ION get physical mem failed, rc%d\n",
-			       __func__, rc);
+			pr_err("%s: Audio ION alloc is failed, rc = %d\n",
+				__func__, rc);
 			goto fail;
 		}
 
-		client->sound_model.data =
-		    ion_map_kernel(client->sound_model.client,
-				   client->sound_model.handle);
-		if (IS_ERR_OR_NULL(client->sound_model.data)) {
-			pr_err("%s: ION memory mapping failed\n", __func__);
-			goto fail;
-		}
-		memset(client->sound_model.data, 0, len);
+		pr_debug("%s: Length = %zd\n", __func__, len);
 		client->lsm_cal_phy_addr = (pad_zero +
 					    client->sound_model.phys +
 					    client->sound_model.size);
 		client->lsm_cal_size = lsm_cal.cal_size;
 		memcpy((client->sound_model.data + pad_zero +
-			client->sound_model.size),
-			(uint32_t *)lsm_cal.cal_kvaddr, lsm_cal.cal_size);
+				client->sound_model.size),
+				(uint32_t *)lsm_cal.cal_kvaddr, lsm_cal.cal_size);
+	    pr_debug("%s: Copy cal start virt_addr %pa phy_addr %pa\n"
+             	"Offset cal virtual Addr %pa\n", __func__,
+             	client->sound_model.data, &client->sound_model.phys,
+             	(pad_zero + client->sound_model.data +
+             	client->sound_model.size));
+
 	} else {
 		rc = -EBUSY;
 		goto fail;

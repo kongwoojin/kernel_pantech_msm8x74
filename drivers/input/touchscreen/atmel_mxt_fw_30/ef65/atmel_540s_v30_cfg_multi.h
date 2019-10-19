@@ -57,7 +57,7 @@
 #define TOUCH_MODE_PEN_LETTER     2
 #define TOUCH_MODE_PEN_DRAW       3 
 #define TOUCH_MODE_MAX_NUM	      4 
-static int mTouch_mode=TOUCH_MODE_NORMAL;
+static int mTouch_mode=TOUCH_MODE_PEN_LETTER;
 
 //++ p11309 - 2013.07.10 for Smart Cover Status
 #ifdef PAN_SUPPORT_SMART_COVER	
